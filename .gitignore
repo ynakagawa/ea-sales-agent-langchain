@@ -1,3 +1,12 @@
+#langchain
+env_name/
+.venv/
+adaptive-rag-101/
+.DS_Store
+basic-rag/__pycache__
+basic-rag/venv/
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

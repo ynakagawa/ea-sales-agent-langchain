@@ -28,7 +28,7 @@ def test_basic_components():
     try:
         from langchain_community.llms import OpenAI
         from langchain_community.chat_models import ChatOpenAI
-        from langchain.prompts import PromptTemplate
+        from langchain_core.prompts import PromptTemplate
         from langchain.chains import LLMChain
         print("✅ Basic LangChain components imported successfully!")
         return True
@@ -40,7 +40,7 @@ def test_basic_components():
 def test_simple_chain():
     """Test creating a simple chain"""
     try:
-        from langchain.prompts import PromptTemplate
+        from langchain_core.prompts import PromptTemplate
         from langchain_community.llms import OpenAI
         
         
@@ -64,12 +64,17 @@ def test_openai_llm():
     """Test OpenAI LLM functionality"""
     try:
         from langchain_community.llms import OpenAI
-        from langchain.prompts import PromptTemplate
+        from langchain_core.prompts import PromptTemplate
         from langchain.chains import LLMChain
         
         # Create an instance of the OpenAI model
-        llm = OpenAI(api_key='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')
+        # Get OpenAI credentials
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            print("⚠️  No OpenAI API key found. Skipping LLM test.")
+            return True
         
+        llm = OpenAI(openai_api_key=api_key)
         # Test direct LLM call
         print("🔄 Testing direct LLM call...")
         response = llm("What is LangChain in one sentence?")

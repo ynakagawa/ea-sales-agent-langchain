@@ -6,7 +6,12 @@ Basic test script for LangChain functionality
 import sys
 import os
 from langsmith import traceable
+from dotenv import load_dotenv
 
+# Load environment variables
+load_dotenv(dotenv_path=".env", override=True)
+
+@traceable
 def test_langchain_import():
     """Test if LangChain can be imported successfully"""
     try:
@@ -17,6 +22,7 @@ def test_langchain_import():
         print(f"❌ Failed to import LangChain: {e}")
         return False
 
+@traceable
 def test_basic_components():
     """Test basic LangChain components"""
     try:
@@ -30,6 +36,7 @@ def test_basic_components():
         print(f"❌ Failed to import basic components: {e}")
         return False
 
+@traceable
 def test_simple_chain():
     """Test creating a simple chain"""
     try:

@@ -15,7 +15,7 @@ from langchain.chains import LLMChain
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import FAISS
+# from langchain.vectorstores import FAISS  # Temporarily disabled due to installation issues
 from langchain.chains import RetrievalQA
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
@@ -70,7 +70,12 @@ Key optimization techniques:
 5. WHERE clause optimization
 6. SELECT clause optimization
 
-Always explain your changes and provide confidence scores."""),
+IMPORTANT: Always provide your rewritten query in a SQL code block like this:
+```sql
+YOUR_REWRITTEN_QUERY_HERE
+```
+
+Then provide a detailed explanation of your changes and expected performance improvements."""),
             ("human", """Rewrite the following SQL query for better performance and readability:
 
 Original Query:
@@ -78,7 +83,7 @@ Original Query:
 
 Context: {context}
 
-Please provide a detailed explanation of your changes and expected performance improvements.""")
+Please provide your rewritten query in a SQL code block, followed by a detailed explanation of your changes and expected performance improvements.""")
         ])
         
         # Performance optimization prompt
@@ -88,7 +93,14 @@ Please provide a detailed explanation of your changes and expected performance i
 2. Minimizing resource usage
 3. Optimizing for specific database engines
 4. Using appropriate indexes
-5. Avoiding common performance pitfalls"""),
+5. Avoiding common performance pitfalls
+
+IMPORTANT: Always provide your optimized query in a SQL code block like this:
+```sql
+YOUR_OPTIMIZED_QUERY_HERE
+```
+
+Then provide specific optimization recommendations and expected performance improvements."""),
             ("human", """Optimize this SQL query for maximum performance:
 
 Query: {query}
@@ -96,7 +108,7 @@ Query: {query}
 Database Type: {db_type}
 Table Schema: {schema}
 
-Provide specific optimization recommendations.""")
+Please provide your optimized query in a SQL code block, followed by specific optimization recommendations and expected performance improvements.""")
         ])
         
         # Readability improvement prompt
@@ -106,12 +118,19 @@ Provide specific optimization recommendations.""")
 2. Logical query structure
 3. Proper formatting and indentation
 4. Meaningful aliases
-5. Simplified complex expressions"""),
+5. Simplified complex expressions
+
+IMPORTANT: Always provide your improved query in a SQL code block like this:
+```sql
+YOUR_IMPROVED_QUERY_HERE
+```
+
+Then explain the readability improvements made."""),
             ("human", """Improve the readability of this SQL query:
 
 Query: {query}
 
-Focus on making it more maintainable and easier to understand.""")
+Please provide your improved query in a SQL code block, followed by an explanation of the readability improvements made.""")
         ])
         
         # Cosmos DB specific optimization prompt
@@ -123,14 +142,21 @@ Focus on making it more maintainable and easier to understand.""")
 4. Indexing strategies
 5. Query patterns for NoSQL
 6. JSON path expressions
-7. Array operations"""),
+7. Array operations
+
+IMPORTANT: Always provide your optimized query in a SQL code block like this:
+```sql
+YOUR_OPTIMIZED_QUERY_HERE
+```
+
+Then provide Cosmos DB specific optimization recommendations."""),
             ("human", """Optimize this query specifically for Cosmos DB:
 
 Query: {query}
 Container: {container}
 Partition Key: {partition_key}
 
-Provide Cosmos DB specific optimizations.""")
+Please provide your optimized query in a SQL code block, followed by Cosmos DB specific optimization recommendations.""")
         ])
         
     def rewrite_sql_query(self, original_query: str, context: str = "", optimization_type: str = "general") -> SQLRewriteResult:
@@ -178,20 +204,39 @@ Provide Cosmos DB specific optimizations.""")
         """Parse the LLM response into a structured SQLRewriteResult"""
         
         try:
-            # Try to extract SQL query from response
-            sql_match = re.search(r'```sql\s*(.*?)\s*```', response, re.DOTALL | re.IGNORECASE)
-            if not sql_match:
-                sql_match = re.search(r'SELECT.*?(?:;|$)', response, re.DOTALL | re.IGNORECASE)
-            
-            rewritten_query = sql_match.group(1).strip() if sql_match else original_query
-            
-            # Extract explanation
+            # Try multiple patterns to extract SQL query from response
+            rewritten_query = original_query  # Default to original
             explanation = response
-            if sql_match:
-                explanation = response.replace(sql_match.group(0), "").strip()
             
-            # Estimate confidence score based on response quality
-            confidence_score = min(1.0, len(explanation) / 100)  # Simple heuristic
+            # Pattern 1: Look for SQL code blocks
+            sql_match = re.search(r'```sql\s*(.*?)\s*```', response, re.DOTALL | re.IGNORECASE)
+            if sql_match:
+                rewritten_query = sql_match.group(1).strip()
+                explanation = response.replace(sql_match.group(0), "").strip()
+            else:
+                # Pattern 2: Look for SELECT statements
+                sql_match = re.search(r'(SELECT\s+.*?)(?=\n\n|\n[A-Z]|$)', response, re.DOTALL | re.IGNORECASE)
+                if sql_match:
+                    rewritten_query = sql_match.group(1).strip()
+                    explanation = response.replace(sql_match.group(1), "").strip()
+                else:
+                    # Pattern 3: Look for any SQL-like statement
+                    sql_match = re.search(r'(SELECT|UPDATE|DELETE|INSERT)\s+.*?(?=\n\n|\n[A-Z]|$)', response, re.DOTALL | re.IGNORECASE)
+                    if sql_match:
+                        rewritten_query = sql_match.group(0).strip()
+                        explanation = response.replace(sql_match.group(0), "").strip()
+            
+            # Clean up explanation
+            explanation = re.sub(r'^\s*[-*]\s*', '', explanation, flags=re.MULTILINE)
+            explanation = explanation.strip()
+            
+            # Estimate confidence score based on response quality and changes
+            confidence_score = 0.5  # Base confidence
+            if rewritten_query != original_query:
+                confidence_score += 0.3  # Bonus for actual changes
+            if len(explanation) > 50:
+                confidence_score += 0.2  # Bonus for detailed explanation
+            confidence_score = min(1.0, confidence_score)
             
             return SQLRewriteResult(
                 original_query=original_query,
@@ -220,25 +265,20 @@ Provide Cosmos DB specific optimizations.""")
             results.append(result)
         return results
     
-    def create_query_embeddings(self, queries: List[str]) -> FAISS:
+    def create_query_embeddings(self, queries: List[str]):
         """Create embeddings for SQL queries for similarity search"""
-        documents = [Document(page_content=query, metadata={"type": "sql_query"}) for query in queries]
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        split_docs = text_splitter.split_documents(documents)
-        
-        vectorstore = FAISS.from_documents(split_docs, self.embeddings)
-        return vectorstore
+        print("⚠️  FAISS not available - similarity search disabled")
+        return None
     
-    def find_similar_queries(self, query: str, vectorstore: FAISS, k: int = 5) -> List[Document]:
+    def find_similar_queries(self, query: str, vectorstore, k: int = 5) -> List[Document]:
         """Find similar SQL queries using embeddings"""
-        return vectorstore.similarity_search(query, k=k)
+        print("⚠️  FAISS not available - returning empty list")
+        return []
     
-    def rewrite_with_similar_context(self, query: str, vectorstore: FAISS, optimization_type: str = "general") -> SQLRewriteResult:
+    def rewrite_with_similar_context(self, query: str, vectorstore, optimization_type: str = "general") -> SQLRewriteResult:
         """Rewrite a query using context from similar queries"""
-        similar_queries = self.find_similar_queries(query, vectorstore, k=3)
-        context = "\n".join([doc.page_content for doc in similar_queries])
-        
-        return self.rewrite_sql_query(query, context, optimization_type)
+        print("⚠️  FAISS not available - rewriting without context")
+        return self.rewrite_sql_query(query, "", optimization_type)
     
     def analyze_query_patterns(self, queries: List[str]) -> Dict[str, Any]:
         """Analyze patterns in SQL queries for optimization insights"""
